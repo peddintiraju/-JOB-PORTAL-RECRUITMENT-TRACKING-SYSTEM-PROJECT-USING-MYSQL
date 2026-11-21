@@ -1,0 +1,697 @@
+-- =====================================================================
+-- JOB PORTAL RECRUITMENT TRACKING SYSTEM | END-TO-END MYSQL PROJECT
+-- RDBMS: MySQL 8.0+
+-- =====================================================================
+-- CONTENTS
+-- PART 1  : Database and table creation
+-- PART 2  : Sample data
+-- PART 3  : Indexes
+-- PART 4  : Views
+-- PART 5  : Stored procedures
+-- PART 6  : Triggers 
+-- PART 7  : Query Bank - Level 1 (basic)
+-- PART 8  : Query Bank - Level 2 (filters and sorting)
+-- PART 9  : Query Bank - Level 3 (joins and aggregates)
+-- PART 10 : Demo calls
+
+-- =====================================================================
+-- PART 1: DATABASE & TABLE CREATION
+-- =====================================================================
+DROP DATABASE IF EXISTS job_portal_db;
+CREATE DATABASE job_portal_db;
+USE job_portal_db;
+
+-- 1. Job seekers / candidates
+CREATE TABLE job_seekers (
+    seeker_id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    phone VARCHAR(15),
+    city VARCHAR(60),
+    experience_years DECIMAL(4,1) DEFAULT 0,
+    education VARCHAR(100),
+    registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Companies
+CREATE TABLE companies (
+    company_id INT AUTO_INCREMENT PRIMARY KEY,
+    company_name VARCHAR(120) NOT NULL,
+    industry VARCHAR(80),
+    city VARCHAR(60),
+    website VARCHAR(180),
+    email VARCHAR(120) UNIQUE
+);
+
+-- 3. Recruiters belong to a company
+CREATE TABLE recruiters (
+    recruiter_id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    recruiter_name VARCHAR(100) NOT NULL,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    phone VARCHAR(15),
+    FOREIGN KEY (company_id) REFERENCES companies(company_id)
+);
+
+-- 4. Job vacancies posted by companies and recruiters
+CREATE TABLE jobs (
+    job_id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    recruiter_id INT NOT NULL,
+    job_title VARCHAR(120) NOT NULL,
+    job_description TEXT,
+    job_location VARCHAR(80),
+    job_type ENUM('Full-Time','Part-Time','Internship','Contract') DEFAULT 'Full-Time',
+    salary_min DECIMAL(10,2),
+    salary_max DECIMAL(10,2),
+    experience_required DECIMAL(4,1) DEFAULT 0,
+    posted_date DATE NOT NULL,
+    application_deadline DATE,
+    job_status ENUM('Open','Closed','On Hold') DEFAULT 'Open',
+    FOREIGN KEY (company_id) REFERENCES companies(company_id),
+    FOREIGN KEY (recruiter_id) REFERENCES recruiters(recruiter_id),
+    CHECK (salary_min IS NULL OR salary_max IS NULL OR salary_max >= salary_min)
+);
+
+-- 5. Applications: connects job seekers and jobs
+CREATE TABLE applications (
+    application_id INT AUTO_INCREMENT PRIMARY KEY,
+    seeker_id INT NOT NULL,
+    job_id INT NOT NULL,
+    applied_date DATE NOT NULL,
+    application_status ENUM('Applied','Under Review','Shortlisted','Interview','Selected','Rejected') DEFAULT 'Applied',
+    resume_file VARCHAR(255),
+    UNIQUE (seeker_id, job_id),
+    FOREIGN KEY (seeker_id) REFERENCES job_seekers(seeker_id),
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+);
+
+-- 6. Skills catalogue
+CREATE TABLE skills (
+    skill_id INT AUTO_INCREMENT PRIMARY KEY,
+    skill_name VARCHAR(80) NOT NULL UNIQUE
+);
+
+-- 7. Many-to-many relationship between job seekers and skills
+CREATE TABLE seeker_skills (
+    seeker_id INT NOT NULL,
+    skill_id INT NOT NULL,
+    proficiency_level ENUM('Beginner','Intermediate','Advanced') DEFAULT 'Beginner',
+    PRIMARY KEY (seeker_id, skill_id),
+    FOREIGN KEY (seeker_id) REFERENCES job_seekers(seeker_id),
+    FOREIGN KEY (skill_id) REFERENCES skills(skill_id)
+);
+
+-- 8. Interviews scheduled for applications
+CREATE TABLE interviews (
+    interview_id INT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    interview_date DATETIME NOT NULL,
+    interview_mode ENUM('Online','In-Person','Phone') DEFAULT 'Online',
+    interview_round VARCHAR(50),
+    interviewer_name VARCHAR(100),
+    interview_result ENUM('Pending','Passed','Failed') DEFAULT 'Pending',
+    FOREIGN KEY (application_id) REFERENCES applications(application_id)
+);
+
+
+-- =====================================================================
+-- PART 2: SAMPLE DATA
+-- =====================================================================
+
+INSERT INTO job_seekers (full_name,email,phone,city,experience_years,education) VALUES
+('Raju Kumar','raju@gmail.com','9876500001','Visakhapatnam',0.0,'B.Tech CSE'),
+('Ananya Rao','ananya@gmail.com','9876500002','Hyderabad',1.0,'B.Tech IT'),
+('Arjun Sharma','arjun@gmail.com','9876500003','Bengaluru',2.0,'B.Sc Computer Science'),
+('Priya Reddy','priya@gmail.com','9876500004','Visakhapatnam',0.5,'B.Tech CSE'),
+('Kiran Patel','kiran@gmail.com','9876500005','Pune',3.0,'MCA'),
+('Sneha Das','sneha@gmail.com','9876500006','Chennai',1.5,'B.Tech ECE');
+
+INSERT INTO companies (company_name,industry,city,website,email) VALUES
+('TechNova Solutions','IT Services','Hyderabad','https://technova.example','careers@technova.example'),
+('DataSphere Analytics','Data Analytics','Bengaluru','https://datasphere.example','jobs@datasphere.example'),
+('CloudBridge Technologies','Cloud Computing','Visakhapatnam','https://cloudbridge.example','hr@cloudbridge.example');
+
+INSERT INTO recruiters (company_id,recruiter_name,email,phone) VALUES
+(1,'Meera Nair','meera@technova.example','9000000001'),
+(2,'Rahul Verma','rahul@datasphere.example','9000000002'),
+(3,'Divya Singh','divya@cloudbridge.example','9000000003');
+
+INSERT INTO jobs (company_id,recruiter_id,job_title,job_description,job_location,job_type,salary_min,salary_max,experience_required,posted_date,application_deadline,job_status) VALUES
+(1,1,'Python Developer','Develop and maintain Python applications','Hyderabad','Full-Time',300000,600000,0,'2026-10-01','2026-12-15','Open'),
+(2,2,'Data Analyst','Analyze data and prepare business reports','Bengaluru','Full-Time',350000,700000,0,'2026-10-05','2026-12-20','Open'),
+(3,3,'SQL Developer','Write SQL queries and maintain databases','Visakhapatnam','Full-Time',300000,550000,1,'2026-10-10','2026-12-10','Open'),
+(1,1,'Web Development Intern','Assist with frontend and backend development','Hyderabad','Internship',80000,150000,0,'2026-10-15','2026-11-30','Open'),
+(2,2,'Senior Data Engineer','Build data pipelines','Bengaluru','Full-Time',900000,1400000,4,'2026-09-01','2026-10-15','Closed'),
+(3,3,'Cloud Support Associate','Support cloud infrastructure','Visakhapatnam','Full-Time',250000,450000,0,'2026-10-20','2026-12-25','Open');
+
+INSERT INTO applications (seeker_id,job_id,applied_date,application_status,resume_file) VALUES
+(1,1,'2026-10-20','Under Review','raju_resume.pdf'),
+(1,3,'2026-10-21','Shortlisted','raju_resume.pdf'),
+(2,2,'2026-10-22','Interview','ananya_resume.pdf'),
+(3,2,'2026-10-23','Selected','arjun_resume.pdf'),
+(4,1,'2026-10-24','Rejected','priya_resume.pdf'),
+(4,4,'2026-10-25','Applied','priya_resume.pdf'),
+(5,5,'2026-09-20','Rejected','kiran_resume.pdf'),
+(6,6,'2026-10-26','Applied','sneha_resume.pdf'),
+(2,6,'2026-10-27','Under Review','ananya_resume.pdf');
+
+INSERT INTO skills (skill_name) VALUES
+('Python'),('SQL'),('Excel'),('Power BI'),('HTML'),('CSS'),('JavaScript'),('Java'),('AWS');
+
+INSERT INTO seeker_skills (seeker_id,skill_id,proficiency_level) VALUES
+(1,1,'Intermediate'),(1,2,'Intermediate'),(1,5,'Beginner'),
+(2,2,'Advanced'),(2,3,'Advanced'),(2,4,'Intermediate'),
+(3,1,'Advanced'),(3,2,'Advanced'),(3,8,'Intermediate'),
+(4,1,'Beginner'),(4,2,'Intermediate'),(4,6,'Beginner'),
+(5,2,'Advanced'),(5,9,'Intermediate'),
+(6,5,'Intermediate'),(6,6,'Intermediate'),(6,7,'Beginner');
+
+INSERT INTO interviews (application_id,interview_date,interview_mode,interview_round,interviewer_name,interview_result) VALUES
+(2,'2026-11-20 10:00:00','Online','Technical Round','Sanjay Rao','Pending'),
+(3,'2026-11-21 11:30:00','Online','HR Round','Meera Nair','Pending'),
+(4,'2026-10-30 14:00:00','In-Person','Final Round','Rahul Verma','Passed');
+
+-- =====================================================================
+-- PART 3: INDEXES
+-- Indexes help MySQL find rows faster, similar to an index in a book.
+-- =====================================================================
+CREATE INDEX idx_seekers_city ON job_seekers(city);
+CREATE INDEX idx_jobs_company ON jobs(company_id);
+CREATE INDEX idx_jobs_status ON jobs(job_status);
+CREATE INDEX idx_jobs_location ON jobs(job_location);
+CREATE INDEX idx_jobs_posted_date ON jobs(posted_date);
+CREATE INDEX idx_applications_job ON applications(job_id);
+CREATE INDEX idx_applications_seeker ON applications(seeker_id);
+CREATE INDEX idx_applications_status ON applications(application_status);
+CREATE INDEX idx_interviews_date ON interviews(interview_date);
+
+-- =====================================================================
+-- PART 4: VIEWS
+-- A view is a saved SELECT query that can be used like a virtual table.
+-- =====================================================================
+
+-- 4.1 Job details with company information
+CREATE OR REPLACE VIEW view_job_details AS
+SELECT j.job_id,j.job_title,c.company_name,j.job_location,j.job_type,
+       j.salary_min,j.salary_max,j.experience_required,j.posted_date,
+       j.application_deadline,j.job_status
+FROM jobs j
+JOIN companies c ON j.company_id = c.company_id;
+
+-- 4.2 Application details with candidate, job and company names
+CREATE OR REPLACE VIEW view_application_details AS
+SELECT a.application_id,js.full_name,js.email,j.job_title,c.company_name,
+       a.applied_date,a.application_status
+FROM applications a
+JOIN job_seekers js ON a.seeker_id = js.seeker_id
+JOIN jobs j ON a.job_id = j.job_id
+JOIN companies c ON j.company_id = c.company_id;
+
+-- 4.3 Number of applications received by each job
+CREATE OR REPLACE VIEW view_job_application_count AS
+SELECT j.job_id,j.job_title,c.company_name,
+       COUNT(a.application_id) AS total_applications
+FROM jobs j
+JOIN companies c ON j.company_id = c.company_id
+LEFT JOIN applications a ON j.job_id = a.job_id
+GROUP BY j.job_id,j.job_title,c.company_name;
+
+-- 4.4 Candidate skills
+CREATE OR REPLACE VIEW view_candidate_skills AS
+SELECT js.seeker_id,js.full_name,s.skill_name,ss.proficiency_level
+FROM job_seekers js
+JOIN seeker_skills ss ON js.seeker_id = ss.seeker_id
+JOIN skills s ON ss.skill_id = s.skill_id;
+
+-- =====================================================================
+-- PART 5: STORED PROCEDURES
+-- =====================================================================
+
+-- 5.1 Get all applications submitted by one candidate
+DROP PROCEDURE IF EXISTS sp_get_seeker_applications;
+DELIMITER $$
+CREATE PROCEDURE sp_get_seeker_applications(IN p_seeker_id INT)
+BEGIN
+    SELECT application_id,job_id,applied_date,application_status
+    FROM applications
+    WHERE seeker_id = p_seeker_id
+    ORDER BY applied_date DESC;
+END $$
+DELIMITER ;
+
+-- 5.2 Get all applicants for one job
+DROP PROCEDURE IF EXISTS sp_get_job_applicants;
+DELIMITER $$
+CREATE PROCEDURE sp_get_job_applicants(IN p_job_id INT)
+BEGIN
+    SELECT a.application_id,js.full_name,js.email,js.city,
+           a.applied_date,a.application_status
+    FROM applications a
+    JOIN job_seekers js ON a.seeker_id = js.seeker_id
+    WHERE a.job_id = p_job_id
+    ORDER BY a.applied_date;
+END $$
+DELIMITER ;
+
+-- 5.3 Count applications by status
+DROP PROCEDURE IF EXISTS sp_application_status_report;
+DELIMITER $$
+CREATE PROCEDURE sp_application_status_report()
+BEGIN
+    SELECT application_status,COUNT(*) AS total_applications
+    FROM applications
+    GROUP BY application_status
+    ORDER BY total_applications DESC;
+END $$
+DELIMITER ;
+
+-- 5.4 Update an application's status
+DROP PROCEDURE IF EXISTS sp_update_application_status;
+DELIMITER $$
+CREATE PROCEDURE sp_update_application_status(
+    IN p_application_id INT,
+    IN p_new_status VARCHAR(30)
+)
+BEGIN
+    UPDATE applications
+    SET application_status = p_new_status
+    WHERE application_id = p_application_id;
+END $$
+DELIMITER ;
+
+-- =====================================================================
+-- PART 6: TRIGGERS
+-- =====================================================================
+
+-- 6.1 Record every new application in the status history table
+DROP TRIGGER IF EXISTS trg_application_created;
+DELIMITER $$
+CREATE TRIGGER trg_application_created
+AFTER INSERT ON applications
+FOR EACH ROW
+BEGIN
+    INSERT INTO application_status_history
+        (application_id,old_status,new_status)
+    VALUES (NEW.application_id,NULL,NEW.application_status);
+END $$
+DELIMITER ;
+
+-- 6.2 Record every application status change
+DROP TRIGGER IF EXISTS trg_application_status_update;
+DELIMITER $$
+CREATE TRIGGER trg_application_status_update
+AFTER UPDATE ON applications
+FOR EACH ROW
+BEGIN
+    IF NOT (OLD.application_status <=> NEW.application_status) THEN
+        INSERT INTO application_status_history
+            (application_id,old_status,new_status)
+        VALUES (NEW.application_id,OLD.application_status,NEW.application_status);
+    END IF;
+END $$
+DELIMITER ;
+
+-- 6.3 Prevent applications for closed jobs or after the deadline
+DROP TRIGGER IF EXISTS trg_check_job_before_application;
+DELIMITER $$
+CREATE TRIGGER trg_check_job_before_application
+BEFORE INSERT ON applications
+FOR EACH ROW
+BEGIN
+    DECLARE v_job_status VARCHAR(20);
+    DECLARE v_deadline DATE;
+    SELECT job_status,application_deadline
+      INTO v_job_status,v_deadline
+    FROM jobs
+    WHERE job_id = NEW.job_id;
+
+    IF v_job_status <> 'Open' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Applications are allowed only for open jobs';
+    END IF;
+
+    IF v_deadline IS NOT NULL AND NEW.applied_date > v_deadline THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Application deadline has passed';
+    END IF;
+END $$
+DELIMITER ;
+
+-- =====================================================================
+-- PART 7: QUERY BANK - LEVEL 1 (BASIC SELECT)
+-- Run each query separately to practise.
+-- =====================================================================
+-- Q1. Display all job seekers.
+SELECT * FROM job_seekers;
+Output:
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+| seeker_id | full_name    | email            | phone      | city          | experience_years | education             | registered_at       |
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+|         1 | Raju Kumar   | raju@gmail.com   | 9876500001 | Visakhapatnam |              0.0 | B.Tech CSE            | 2026-11-18 18:18:39 |
+|         2 | Ananya Rao   | ananya@gmail.com | 9876500002 | Hyderabad     |              1.0 | B.Tech IT             | 2026-11-18 18:18:39 |
+|         3 | Arjun Sharma | arjun@gmail.com  | 9876500003 | Bengaluru     |              2.0 | B.Sc Computer Science | 2026-11-18 18:18:39 |
+|         4 | Priya Reddy  | priya@gmail.com  | 9876500004 | Visakhapatnam |              0.5 | B.Tech CSE            | 2026-11-18 18:18:39 |
+|         5 | Kiran Patel  | kiran@gmail.com  | 9876500005 | Pune          |              3.0 | MCA                   | 2026-11-18 18:18:39 |
+|         6 | Sneha Das    | sneha@gmail.com  | 9876500006 | Chennai       |              1.5 | B.Tech ECE            | 2026-11-18 18:18:39 |
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+
+-- Q2. Display all available jobs.
+SELECT * FROM jobs;
+Output:
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title               | job_description                              | job_location  | job_type   | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+|      1 |          1 |            1 | Python Developer        | Develop and maintain Python applications     | Hyderabad     | Full-Time  |  300000.00 |  600000.00 |                 0.0 | 2026-10-01  | 2026-12-15           | Open       |
+|      2 |          2 |            2 | Data Analyst            | Analyze data and prepare business reports    | Bengaluru     | Full-Time  |  350000.00 |  700000.00 |                 0.0 | 2026-10-05  | 2026-12-20           | Open       |
+|      3 |          3 |            3 | SQL Developer           | Write SQL queries and maintain databases     | Visakhapatnam | Full-Time  |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      4 |          1 |            1 | Web Development Intern  | Assist with frontend and backend development | Hyderabad     | Internship |   80000.00 |  150000.00 |                 0.0 | 2026-10-15  | 2026-11-30           | Open       |
+|      5 |          2 |            2 | Senior Data Engineer    | Build data pipelines                         | Bengaluru     | Full-Time  |  900000.00 | 1400000.00 |                 4.0 | 2026-09-01  | 2026-10-15           | Closed     |
+|      6 |          3 |            3 | Cloud Support Associate | Support cloud infrastructure                 | Visakhapatnam | Full-Time  |  250000.00 |  450000.00 |                 0.0 | 2026-10-20  | 2026-12-25           | Open       |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+-- Q3. Display only candidate names and email addresses.
+SELECT full_name,email FROM job_seekers;
+Output:
++--------------+------------------+
+| full_name    | email            |
++--------------+------------------+
+| Raju Kumar   | raju@gmail.com   |
+| Ananya Rao   | ananya@gmail.com |
+| Arjun Sharma | arjun@gmail.com  |
+| Priya Reddy  | priya@gmail.com  |
+| Kiran Patel  | kiran@gmail.com  |
+| Sneha Das    | sneha@gmail.com  |
++--------------+------------------+
+
+-- Q4. Display unique cities of job seekers.
+SELECT DISTINCT city FROM job_seekers;
+Output:
++---------------+
+| city          |
++---------------+
+| Bengaluru     |
+| Chennai       |
+| Hyderabad     |
+| Pune          |
+| Visakhapatnam |
++---------------+
+
+-- =====================================================================
+-- PART 8: QUERY BANK - LEVEL 2 (FILTERING & SORTING)
+-- =====================================================================
+-- Q5. Find all open jobs.
+SELECT * FROM jobs WHERE job_status = 'Open';
+Output:
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title               | job_description                              | job_location  | job_type   | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+|      1 |          1 |            1 | Python Developer        | Develop and maintain Python applications     | Hyderabad     | Full-Time  |  300000.00 |  600000.00 |                 0.0 | 2026-10-01  | 2026-12-15           | Open       |
+|      2 |          2 |            2 | Data Analyst            | Analyze data and prepare business reports    | Bengaluru     | Full-Time  |  350000.00 |  700000.00 |                 0.0 | 2026-10-05  | 2026-12-20           | Open       |
+|      3 |          3 |            3 | SQL Developer           | Write SQL queries and maintain databases     | Visakhapatnam | Full-Time  |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      4 |          1 |            1 | Web Development Intern  | Assist with frontend and backend development | Hyderabad     | Internship |   80000.00 |  150000.00 |                 0.0 | 2026-10-15  | 2026-11-30           | Open       |
+|      6 |          3 |            3 | Cloud Support Associate | Support cloud infrastructure                 | Visakhapatnam | Full-Time  |  250000.00 |  450000.00 |                 0.0 | 2026-10-20  | 2026-12-25           | Open       |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+
+-- Q6. Find jobs located in Visakhapatnam.
+SELECT * FROM jobs WHERE job_location = 'Visakhapatnam';
+Output:
++--------+------------+--------------+-------------------------+------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title               | job_description                          | job_location  | job_type  | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+-------------------------+------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+|      3 |          3 |            3 | SQL Developer           | Write SQL queries and maintain databases | Visakhapatnam | Full-Time |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      6 |          3 |            3 | Cloud Support Associate | Support cloud infrastructure             | Visakhapatnam | Full-Time |  250000.00 |  450000.00 |                 0.0 | 2026-10-20  | 2026-12-25           | Open       |
++--------+------------+--------------+-------------------------+------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+
+-- Q7. Find candidates with no work experience.
+SELECT * FROM job_seekers WHERE experience_years = 0;
+Output:
++-----------+------------+----------------+------------+---------------+------------------+------------+---------------------+
+| seeker_id | full_name  | email          | phone      | city          | experience_years | education  | registered_at       |
++-----------+------------+----------------+------------+---------------+------------------+------------+---------------------+
+|         1 | Raju Kumar | raju@gmail.com | 9876500001 | Visakhapatnam |              0.0 | B.Tech CSE | 2026-11-18 18:18:39 |
++-----------+------------+----------------+------------+---------------+------------------+------------+---------------------+
+
+-- Q8. Find jobs with a maximum salary greater than Rs. 5,00,000.
+SELECT * FROM jobs WHERE salary_max > 500000;
+Output:
++--------+------------+--------------+----------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title            | job_description                           | job_location  | job_type  | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+----------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+|      1 |          1 |            1 | Python Developer     | Develop and maintain Python applications  | Hyderabad     | Full-Time |  300000.00 |  600000.00 |                 0.0 | 2026-10-01  | 2026-12-15           | Open       |
+|      2 |          2 |            2 | Data Analyst         | Analyze data and prepare business reports | Bengaluru     | Full-Time |  350000.00 |  700000.00 |                 0.0 | 2026-10-05  | 2026-12-20           | Open       |
+|      3 |          3 |            3 | SQL Developer        | Write SQL queries and maintain databases  | Visakhapatnam | Full-Time |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      5 |          2 |            2 | Senior Data Engineer | Build data pipelines                      | Bengaluru     | Full-Time |  900000.00 | 1400000.00 |                 4.0 | 2026-09-01  | 2026-10-15           | Closed     |
++--------+------------+--------------+----------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+
+-- Q9. Find jobs with salary between Rs. 3,00,000 and Rs. 7,00,000.
+SELECT * FROM jobs WHERE salary_max BETWEEN 300000 AND 700000;
+Output:
++--------+------------+--------------+-------------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title               | job_description                           | job_location  | job_type  | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+-------------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+|      1 |          1 |            1 | Python Developer        | Develop and maintain Python applications  | Hyderabad     | Full-Time |  300000.00 |  600000.00 |                 0.0 | 2026-10-01  | 2026-12-15           | Open       |
+|      2 |          2 |            2 | Data Analyst            | Analyze data and prepare business reports | Bengaluru     | Full-Time |  350000.00 |  700000.00 |                 0.0 | 2026-10-05  | 2026-12-20           | Open       |
+|      3 |          3 |            3 | SQL Developer           | Write SQL queries and maintain databases  | Visakhapatnam | Full-Time |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      6 |          3 |            3 | Cloud Support Associate | Support cloud infrastructure              | Visakhapatnam | Full-Time |  250000.00 |  450000.00 |                 0.0 | 2026-10-20  | 2026-12-25           | Open       |
++--------+------------+--------------+-------------------------+-------------------------------------------+---------------+-----------+------------+------------+---------------------+-------------+----------------------+------------+
+
+-- Q10. Display the latest posted jobs first.
+SELECT * FROM jobs ORDER BY posted_date DESC;
+Output:
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+| job_id | company_id | recruiter_id | job_title               | job_description                              | job_location  | job_type   | salary_min | salary_max | experience_required | posted_date | application_deadline | job_status |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+|      6 |          3 |            3 | Cloud Support Associate | Support cloud infrastructure                 | Visakhapatnam | Full-Time  |  250000.00 |  450000.00 |                 0.0 | 2026-10-20  | 2026-12-25           | Open       |
+|      4 |          1 |            1 | Web Development Intern  | Assist with frontend and backend development | Hyderabad     | Internship |   80000.00 |  150000.00 |                 0.0 | 2026-10-15  | 2026-11-30           | Open       |
+|      3 |          3 |            3 | SQL Developer           | Write SQL queries and maintain databases     | Visakhapatnam | Full-Time  |  300000.00 |  550000.00 |                 1.0 | 2026-10-10  | 2026-12-10           | Open       |
+|      2 |          2 |            2 | Data Analyst            | Analyze data and prepare business reports    | Bengaluru     | Full-Time  |  350000.00 |  700000.00 |                 0.0 | 2026-10-05  | 2026-12-20           | Open       |
+|      1 |          1 |            1 | Python Developer        | Develop and maintain Python applications     | Hyderabad     | Full-Time  |  300000.00 |  600000.00 |                 0.0 | 2026-10-01  | 2026-12-15           | Open       |
+|      5 |          2 |            2 | Senior Data Engineer    | Build data pipelines                         | Bengaluru     | Full-Time  |  900000.00 | 1400000.00 |                 4.0 | 2026-09-01  | 2026-10-15           | Closed     |
++--------+------------+--------------+-------------------------+----------------------------------------------+---------------+------------+------------+------------+---------------------+-------------+----------------------+------------+
+
+-- Q11. Display the five most recently registered candidates.
+SELECT * FROM job_seekers ORDER BY registered_at DESC LIMIT 5;
+Output:
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+| seeker_id | full_name    | email            | phone      | city          | experience_years | education             | registered_at       |
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+|         1 | Raju Kumar   | raju@gmail.com   | 9876500001 | Visakhapatnam |              0.0 | B.Tech CSE            | 2026-11-18 18:18:39 |
+|         2 | Ananya Rao   | ananya@gmail.com | 9876500002 | Hyderabad     |              1.0 | B.Tech IT             | 2026-11-18 18:18:39 |
+|         3 | Arjun Sharma | arjun@gmail.com  | 9876500003 | Bengaluru     |              2.0 | B.Sc Computer Science | 2026-11-18 18:18:39 |
+|         4 | Priya Reddy  | priya@gmail.com  | 9876500004 | Visakhapatnam |              0.5 | B.Tech CSE            | 2026-11-18 18:18:39 |
+|         5 | Kiran Patel  | kiran@gmail.com  | 9876500005 | Pune          |              3.0 | MCA                   | 2026-11-18 18:18:39 |
++-----------+--------------+------------------+------------+---------------+------------------+-----------------------+---------------------+
+
+-- =====================================================================
+-- PART 9: QUERY BANK - LEVEL 3 (JOINS & AGGREGATES)
+-- =====================================================================
+-- Q12. Display job titles with their company names.
+SELECT j.job_title,c.company_name
+FROM jobs j JOIN companies c ON j.company_id = c.company_id;
+Output:
++-------------------------+--------------------------+
+| job_title               | company_name             |
++-------------------------+--------------------------+
+| Python Developer        | TechNova Solutions       |
+| Data Analyst            | DataSphere Analytics     |
+| SQL Developer           | CloudBridge Technologies |
+| Web Development Intern  | TechNova Solutions       |
+| Senior Data Engineer    | DataSphere Analytics     |
+| Cloud Support Associate | CloudBridge Technologies |
++-------------------------+--------------------------+
+
+-- Q13. Display candidate names with the jobs they applied for.
+SELECT js.full_name,j.job_title,a.application_status
+FROM applications a
+JOIN job_seekers js ON a.seeker_id = js.seeker_id
+JOIN jobs j ON a.job_id = j.job_id;
+Output:
++--------------+-------------------------+--------------------+
+| full_name    | job_title               | application_status |
++--------------+-------------------------+--------------------+
+| Raju Kumar   | Python Developer        | Under Review       |
+| Raju Kumar   | SQL Developer           | Shortlisted        |
+| Ananya Rao   | Data Analyst            | Interview          |
+| Ananya Rao   | Cloud Support Associate | Under Review       |
+| Arjun Sharma | Data Analyst            | Selected           |
+| Priya Reddy  | Python Developer        | Rejected           |
+| Priya Reddy  | Web Development Intern  | Applied            |
+| Kiran Patel  | Senior Data Engineer    | Rejected           |
+| Sneha Das    | Cloud Support Associate | Applied            |
++--------------+-------------------------+--------------------+
+
+-- Q14. Count the total number of candidates.
+SELECT COUNT(*) AS total_candidates FROM job_seekers;
+Output:
++------------------+
+| total_candidates |
++------------------+
+|                6 |
++------------------+
+
+-- Q15. Count the number of applications received by each job.
+SELECT j.job_title,COUNT(a.application_id) AS total_applications
+FROM jobs j LEFT JOIN applications a ON j.job_id = a.job_id
+GROUP BY j.job_id,j.job_title;
+Output:
++-------------------------+--------------------+
+| job_title               | total_applications |
++-------------------------+--------------------+
+| Python Developer        |                  2 |
+| Data Analyst            |                  2 |
+| SQL Developer           |                  1 |
+| Web Development Intern  |                  1 |
+| Senior Data Engineer    |                  1 |
+| Cloud Support Associate |                  2 |
++-------------------------+--------------------+
+
+-- Q16. Find the average minimum salary offered by each company.
+SELECT c.company_name,AVG(j.salary_min) AS average_min_salary
+FROM companies c JOIN jobs j ON c.company_id = j.company_id
+GROUP BY c.company_id,c.company_name;
+Output:
++--------------------------+--------------------+
+| company_name             | average_min_salary |
++--------------------------+--------------------+
+| TechNova Solutions       |      190000.000000 |
+| DataSphere Analytics     |      625000.000000 |
+| CloudBridge Technologies |      275000.000000 |
++--------------------------+--------------------+
+
+-- Q17. Display candidates who have the SQL skill.
+SELECT js.full_name,s.skill_name
+FROM job_seekers js
+JOIN seeker_skills ss ON js.seeker_id = ss.seeker_id
+JOIN skills s ON ss.skill_id = s.skill_id
+WHERE s.skill_name = 'SQL';
+Output:
++--------------+------------+
+| full_name    | skill_name |
++--------------+------------+
+| Raju Kumar   | SQL        |
+| Ananya Rao   | SQL        |
+| Arjun Sharma | SQL        |
+| Priya Reddy  | SQL        |
+| Kiran Patel  | SQL        |
++--------------+------------+
+
+-- =====================================================================
+-- PART 10: QUERY BANK - LEVEL 4 (ADVANCED REPORTS)
+-- =====================================================================
+-- Q18. Find candidates who have applied for more than one job.
+SELECT js.seeker_id,js.full_name,COUNT(a.application_id) AS applications_count
+FROM job_seekers js
+JOIN applications a ON js.seeker_id = a.seeker_id
+GROUP BY js.seeker_id,js.full_name
+HAVING COUNT(a.application_id) > 1;
+Output:
++-----------+-------------+--------------------+
+| seeker_id | full_name   | applications_count |
++-----------+-------------+--------------------+
+|         1 | Raju Kumar  |                  2 |
+|         2 | Ananya Rao  |                  2 |
+|         4 | Priya Reddy |                  2 |
++-----------+-------------+--------------------+
+
+-- Q19. Find jobs that have received no applications.
+SELECT j.job_id,j.job_title
+FROM jobs j
+LEFT JOIN applications a ON j.job_id = a.job_id
+WHERE a.application_id IS NULL;
+
+-- Q20. Find the candidate(s) with the highest years of experience.
+SELECT * FROM job_seekers
+WHERE experience_years = (SELECT MAX(experience_years) FROM job_seekers);
+Output:
++-----------+-------------+-----------------+------------+------+------------------+-----------+---------------------+
+| seeker_id | full_name   | email           | phone      | city | experience_years | education | registered_at       |
++-----------+-------------+-----------------+------------+------+------------------+-----------+---------------------+
+|         5 | Kiran Patel | kiran@gmail.com | 9876500005 | Pune |              3.0 | MCA       | 2026-11-18 18:18:39 |
++-----------+-------------+-----------------+------------+------+------------------+-----------+---------------------+
+
+-- Q21. Count applications for each company.
+SELECT c.company_name,COUNT(a.application_id) AS total_applications
+FROM companies c
+LEFT JOIN jobs j ON c.company_id = j.company_id
+LEFT JOIN applications a ON j.job_id = a.job_id
+GROUP BY c.company_id,c.company_name;
+Output:
++--------------------------+--------------------+
+| company_name             | total_applications |
++--------------------------+--------------------+
+| TechNova Solutions       |                  3 |
+| DataSphere Analytics     |                  3 |
+| CloudBridge Technologies |                  3 |
++--------------------------+--------------------+
+
+-- Q22. Display each candidate's interview schedule.
+SELECT js.full_name,j.job_title,i.interview_date,i.interview_mode,
+       i.interview_round,i.interview_result
+FROM interviews i
+JOIN applications a ON i.application_id = a.application_id
+JOIN job_seekers js ON a.seeker_id = js.seeker_id
+JOIN jobs j ON a.job_id = j.job_id
+ORDER BY i.interview_date;
+Output:
++--------------+---------------+---------------------+----------------+-----------------+------------------+
+| full_name    | job_title     | interview_date      | interview_mode | interview_round | interview_result |
++--------------+---------------+---------------------+----------------+-----------------+------------------+
+| Arjun Sharma | Data Analyst  | 2026-10-30 14:00:00 | In-Person      | Final Round     | Passed           |
+| Raju Kumar   | SQL Developer | 2026-11-20 10:00:00 | Online         | Technical Round | Pending          |
+| Ananya Rao   | Data Analyst  | 2026-11-21 11:30:00 | Online         | HR Round        | Pending          |
++--------------+---------------+---------------------+----------------+-----------------+------------------+
+
+-- Q23. Show the full status history for every application.
+SELECT h.application_id,h.old_status,h.new_status,h.changed_at
+FROM application_status_history h
+ORDER BY h.application_id,h.changed_at;
+
+-- Q24. Find companies with at least two applications across their jobs.
+SELECT c.company_name,COUNT(a.application_id) AS total_applications
+FROM companies c
+JOIN jobs j ON c.company_id = j.company_id
+JOIN applications a ON j.job_id = a.job_id
+GROUP BY c.company_id,c.company_name
+HAVING COUNT(a.application_id) >= 2;
+Output:
++--------------------------+--------------------+
+| company_name             | total_applications |
++--------------------------+--------------------+
+| TechNova Solutions       |                  3 |
+| DataSphere Analytics     |                  3 |
+| CloudBridge Technologies |                  3 |
++--------------------------+--------------------+
+
+-- =====================================================================
+-- PART 11: DEMO CALLS - VIEWS / PROCEDURES / TRIGGERS
+-- Run these one at a time after the complete script has been executed.
+-- =====================================================================
+
+-- Views
+-- SELECT * FROM view_job_details;
+-- SELECT * FROM view_application_details;
+-- SELECT * FROM view_job_application_count;
+-- SELECT * FROM view_candidate_skills;
+
+-- Stored procedures
+-- CALL sp_get_seeker_applications(1);
+-- CALL sp_get_job_applicants(1);
+-- CALL sp_application_status_report();
+-- CALL sp_update_application_status(1,'Shortlisted');
+
+-- Trigger demonstration: update status, then inspect the audit history.
+-- UPDATE applications SET application_status='Shortlisted' WHERE application_id=1;
+-- SELECT * FROM application_status_history WHERE application_id=1;
+
+-- Trigger demonstration: this should return an error because job 5 is closed.
+-- INSERT INTO applications (seeker_id,job_id,applied_date,application_status)
+-- VALUES (1,5,CURDATE(),'Applied');
+
+-- Useful verification commands
+-- SHOW TABLES;
+-- DESCRIBE job_seekers;
+-- DESCRIBE jobs;
+-- SELECT * FROM applications;
+-- =====================================================================
+-- END OF PROJECT
+-- =====================================================================
